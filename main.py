@@ -18,6 +18,29 @@ import numpy
 import tkinter as tk
 from tkinter import ttk
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+PIXELFINDER_DIRECTORIES = {
+    "com": os.path.join(SCRIPT_DIR, "pixelfinder1"),
+    "tr": os.path.join(SCRIPT_DIR, "pixelfinder2"),
+}
+
+DEFAULT_REGION = "com"
+IMAGE_BASE_PATH = PIXELFINDER_DIRECTORIES[DEFAULT_REGION]
+
+
+def set_image_region(region_key):
+    """Update the active image directory based on the selected region."""
+
+    global IMAGE_BASE_PATH
+    IMAGE_BASE_PATH = PIXELFINDER_DIRECTORIES.get(region_key, PIXELFINDER_DIRECTORIES[DEFAULT_REGION])
+
+
+def image_path(*relative_parts):
+    """Build an absolute path to an image by joining it with the base path."""
+    return os.path.join(IMAGE_BASE_PATH, *relative_parts)
+
 #can aalınca beklemiyor
 #scroll map
 #move the mouse an empty point
@@ -82,6 +105,23 @@ class ThreadControl:
         # Load settings button
         self.load_button = ttk.Button(kayit_frame, text="Ayarları Yükle", command=self.load_settings)
         self.load_button.pack(pady=5,padx=5, side=tk.LEFT)
+
+        # Region selection
+        region_frame = tk.Frame(config_frame, background="#e6f7ff")
+        region_frame.pack(pady=5, padx=15, side=tk.TOP)
+
+        region_label = ttk.Label(region_frame, text="Sunucu:", background="#e6f7ff")
+        region_label.pack(side=tk.LEFT, padx=5)
+
+        self.region_var = tk.StringVar(value="com")
+        self.region_combobox = ttk.Combobox(
+            region_frame,
+            values=["com", "tr"],
+            state='readonly',
+            textvariable=self.region_var,
+            style='CustomCombobox.TCombobox'
+        )
+        self.region_combobox.pack(side=tk.LEFT, padx=5)
 
         # Frame for the duration input
         self.infoframe = tk.Frame(config_frame, background="#e6f7ff",)
@@ -401,6 +441,7 @@ class ThreadControl:
             file.write(f"Troll Power Key: {self.troll_power_key.get()}\n")
             file.write(f"Super Hit Selection: {self.super_hit_selection.get()}\n")
             file.write(f"Aura Delay: {self.aura_delay_dropdown.get()}\n")  # Save the Aura Delay setting
+            file.write(f"Region: {self.region_var.get()}\n")
 
             # Save each dropdown selection in the super hit rows
             first_row_values = [combobox.get() for combobox in self.first_row_frame.winfo_children() if
@@ -413,25 +454,48 @@ class ThreadControl:
     def load_settings(self):
         try:
             with open('settings.txt', 'r') as file:
-                lines = file.readlines()
-                self.duration_entry.delete(0, tk.END)
-                self.duration_entry.insert(0, lines[0].split(': ')[1].strip())
-                self.combobox1.set(lines[1].split(': ')[1].strip())
-                self.combobox2.set(lines[2].split(': ')[1].strip())
-                self.first_turn_mana.set(eval(lines[3].split(': ')[1].strip()))
-                self.first_turn_health.set(eval(lines[4].split(': ')[1].strip()))
-                self.first_turn_wisdom_anger.set(eval(lines[5].split(': ')[1].strip()))
-                self.troll_power_key.set(lines[6].split(': ')[1].strip())
-                self.super_hit_selection.set(int(lines[7].split(': ')[1].strip()))
-                self.aura_delay_dropdown.set(lines[8].split(': ')[1].strip())  # Load the Aura Delay setting
+                settings = {}
+                for line in file:
+                    if ': ' in line:
+                        key, value = line.split(': ', 1)
+                        settings[key.strip()] = value.strip()
 
-                # Load each dropdown selection in the super hit rows
-                first_row_values = lines[9].split(': ')[1].strip().split(',')
+                def str_to_bool(value):
+                    return value.lower() in ("true", "1", "yes", "on")
+
+                self.duration_entry.delete(0, tk.END)
+                self.duration_entry.insert(0, settings.get("Duration", ""))
+                if "First Choice" in settings:
+                    self.combobox1.set(settings["First Choice"])
+                if "Second Choice" in settings:
+                    self.combobox2.set(settings["Second Choice"])
+                if "First Turn Mana" in settings:
+                    self.first_turn_mana.set(str_to_bool(settings["First Turn Mana"]))
+                if "First Turn Health" in settings:
+                    self.first_turn_health.set(str_to_bool(settings["First Turn Health"]))
+                if "First Turn Wisdom-Anger" in settings:
+                    self.first_turn_wisdom_anger.set(str_to_bool(settings["First Turn Wisdom-Anger"]))
+                if "Troll Power Key" in settings:
+                    self.troll_power_key.set(settings["Troll Power Key"])
+                if "Super Hit Selection" in settings:
+                    try:
+                        self.super_hit_selection.set(int(settings["Super Hit Selection"]))
+                    except ValueError:
+                        pass
+                if "Aura Delay" in settings:
+                    self.aura_delay_dropdown.set(settings["Aura Delay"])
+                if "Region" in settings:
+                    region_value = settings["Region"]
+                    if region_value not in PIXELFINDER_DIRECTORIES:
+                        region_value = DEFAULT_REGION
+                    self.region_var.set(region_value)
+
+                first_row_values = settings.get("First Row Values", "").split(',') if settings.get("First Row Values") else []
                 for combobox, value in zip([combobox for combobox in self.first_row_frame.winfo_children() if
                                             isinstance(combobox, ttk.Combobox)], first_row_values):
                     combobox.set(value)
 
-                second_row_values = lines[10].split(': ')[1].strip().split(',')
+                second_row_values = settings.get("Second Row Values", "").split(',') if settings.get("Second Row Values") else []
                 for combobox, value in zip([combobox for combobox in self.second_row_frame.winfo_children() if
                                             isinstance(combobox, ttk.Combobox)], second_row_values):
                     combobox.set(value)
@@ -559,6 +623,7 @@ class ThreadControl:
         if base64imagecheck():
             if not hasattr(self, 'thread') or not self.thread.is_alive():
                 try:
+                    set_image_region(self.region_var.get())
                     duration = int(self.duration_entry.get())
                     self.remaining_time = duration * 60  # Süreyi saniye cinsinden kaydet
                     self.end_time = time.time() + self.remaining_time  # Kesim süresinin bitiş zamanını hesapla
@@ -927,9 +992,9 @@ def savastan_cik(avlan,hizli_cikis):
         pyautogui.click(avlan[0] + random.randint(2, 18), avlan[1] + random.randint(2, 18))
         time.sleep(0.25 + random.uniform(-0.05, 0.05))
     else:
-        cikis = imagesearch("./cikis.png")
+        cikis = imagesearch(image_path("cikis.png"))
         if cikis[0] == -1:
-            sifirla = imagesearch("./sifirla.png")
+            sifirla = imagesearch(image_path("sifirla.png"))
 
             human_like_mouse_move(sifirla[0],
                                   sifirla[1], 0.3,
@@ -944,7 +1009,7 @@ def savastan_cik(avlan,hizli_cikis):
                                   55 + random.randint(5, 15))
 
             time.sleep(1 + random.uniform(-0.25, 0.5))
-            cikis = imagesearch("./cikis.png")
+            cikis = imagesearch(image_path("cikis.png"))
 
         randsayi_1 = random.randint(1,100)
 
@@ -966,9 +1031,9 @@ def savastan_cik(avlan,hizli_cikis):
             time.sleep(0.25 + random.uniform(-0.05, 0.05))
 
 def zafer():
-    zafer = imagesearch("./zafer.png")
-    dovus_bitti = imagesearch("./dovus_bitti.png")
-    code103 = imagesearch("./code103.png")
+    zafer = imagesearch(image_path("zafer.png"))
+    dovus_bitti = imagesearch(image_path("dovus_bitti.png"))
+    code103 = imagesearch(image_path("code103.png"))
 
     if zafer[0] != -1 or dovus_bitti[0] != -1 or code103[0] != -1:
         time.sleep(0.20 + random.uniform(-0.15, 0.15))
@@ -980,7 +1045,7 @@ def find_situation():
 #1 = search
 #2 = fight
     print("Savaş modu - Arama modu analiz ediliyor")
-    if imagesearch("./Fight/fightsw.png")[0] == -1:
+    if imagesearch(image_path("Fight", "fightsw.png"))[0] == -1:
         print("Arama Moduna Geçiliyor")
         return 1
     else:
@@ -988,8 +1053,8 @@ def find_situation():
         return 0
 
 def grab(q, ):
-    golge = imagesearch("golge.png")
-    sayi = imagesearcharea("Rakip_Sayisi.png",1150,198,1185,231,0.8)
+    golge = imagesearch(image_path("golge.png"))
+    sayi = imagesearcharea(image_path("Rakip_Sayisi.png"),1150,198,1185,231,0.8)
 
     print(golge)
 
@@ -1046,12 +1111,12 @@ def grab(q, ):
         input(e)  # Kullanıcı ENTER'a basana kadar bekler
 
 def calculateHealth_EnemyNumber():
-    golge = imagesearch("golge.png")
+    golge = imagesearch(image_path("golge.png"))
 
     if golge[0] == -1:
         time.sleep(1)
         while golge[0] == -1:
-            golge = imagesearch("golge.png")
+            golge = imagesearch(image_path("golge.png"))
             time.sleep(1)
             print("golge görünmüyor")
 
@@ -1155,9 +1220,9 @@ def main(stop_event):
 
         time.sleep(2)
 
-        Map = imagesearch("./Harita.png")
+        Map = imagesearch(image_path("Harita.png"))
 
-        avlan = imagesearch("./PixelFinder/avlan.png")
+        avlan = imagesearch(image_path("PixelFinder", "avlan.png"))
 
         sayac = 0
         sayac1 = 0
@@ -1211,7 +1276,7 @@ def main(stop_event):
 
             if harf[0] != -1:
                 if(harf[1]+299 >= 299):
-                    unlem = imagesearcharea("./unlem.png",harf[0]+220,harf[1]-60+297,harf[0]+80+220,harf[1]+15+297,0.980)
+                    unlem = imagesearcharea(image_path("unlem.png"),harf[0]+220,harf[1]-60+297,harf[0]+80+220,harf[1]+15+297,0.980)
 
                     if unlem[0] != -1:
                         print("Yaratık bulundu ama unlem var - X1Y1")
@@ -1228,7 +1293,7 @@ def main(stop_event):
                             harf = imagesearcharea(selected_imgs[4], 220, 297, 944, 528, 0.70)
                         if harf[0] != -1:
                             if (harf[1] + 299 >= 299):
-                                unlem = imagesearcharea("./unlem.png", harf[0] + x, harf[1] - 60 + y, harf[0] + 80 + x,
+                                unlem = imagesearcharea(image_path("unlem.png"), harf[0] + x, harf[1] - 60 + y, harf[0] + 80 + x,
                                                         harf[1] + 15 + y, 0.980)
                                 bolge = 1
                             else:
@@ -1250,7 +1315,7 @@ def main(stop_event):
                             harf = imagesearcharea(selected_imgs[4], 944, 297, 1678, 528, 0.70)
                         if harf[0] != -1:
                             if (harf[1] + 299 >= 299):
-                                unlem = imagesearcharea("./unlem.png", harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
+                                unlem = imagesearcharea(image_path("unlem.png"), harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
                                 bolge = 2
                             else:
                                 found = False
@@ -1271,7 +1336,7 @@ def main(stop_event):
                             harf = imagesearcharea(selected_imgs[4], 220, 528, 944, 761, 0.70)
                         if harf[0] != -1:
                             if (harf[1] + 299 >= 299):
-                                unlem = imagesearcharea("./unlem.png", harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
+                                unlem = imagesearcharea(image_path("unlem.png"), harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
                                 bolge = 3
                             else:
                                 found = False
@@ -1292,7 +1357,7 @@ def main(stop_event):
                             harf = imagesearcharea(selected_imgs[4], 944, 528, 1678, 761, 0.70)
                         if harf[0] != -1:
                             if (harf[1] + 299 >= 299):
-                                unlem = imagesearcharea("./unlem.png", harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
+                                unlem = imagesearcharea(image_path("unlem.png"), harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
                                 bolge = 4
                             else:
                                 found = False
@@ -1315,9 +1380,9 @@ def main(stop_event):
                                               55 + random.randint(5, 15))
                         time.sleep(0.75)
 
-                        maptest = imagesearcharea("Harita.png",760,146,930,270)
-                        zaten_dovuste = imagesearcharea("iptal.png", 182, 200, 1740, 863, 0.8)
-                        kapat = imagesearch("kapat.png")
+                        maptest = imagesearcharea(image_path("Harita.png"),760,146,930,270)
+                        zaten_dovuste = imagesearcharea(image_path("iptal.png"), 182, 200, 1740, 863, 0.8)
+                        kapat = imagesearch(image_path("kapat.png"))
 
                         if maptest[0] != -1 and bolge != 0:
                             found = False
@@ -1357,7 +1422,7 @@ def main(stop_event):
                                 if harf[0] != -1:
                                     if (harf[1] + 299 >= 299):
                                         found = True
-                                        unlem = imagesearcharea("./unlem.png", harf[0] + x, harf[1] - 60 + y, harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
+                                        unlem = imagesearcharea(image_path("unlem.png"), harf[0] + x, harf[1] - 60 + y, harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
                                         if unlem[0] != -1:
                                             print("Yaratık bulundu ama unlem var - devam1")
                                             found = False
@@ -1381,7 +1446,7 @@ def main(stop_event):
                                 if harf[0] != -1:
                                     if (harf[1] + 299 >= 299):
                                         found = True
-                                        unlem = imagesearcharea("./unlem.png", harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
+                                        unlem = imagesearcharea(image_path("unlem.png"), harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
                                         if unlem[0] != -1:
                                             print("Yaratık bulundu ama unlem var - devam2")
                                             found = False
@@ -1405,7 +1470,7 @@ def main(stop_event):
                                 if harf[0] != -1:
                                     if (harf[1] + 299 >= 299):
                                         found = True
-                                        unlem = imagesearcharea("./unlem.png", harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
+                                        unlem = imagesearcharea(image_path("unlem.png"), harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
                                         if unlem[0] != -1:
                                             print("Yaratık bulundu ama unlem var - devam3")
                                             found = False
@@ -1429,7 +1494,7 @@ def main(stop_event):
                                 if harf[0] != -1:
                                     if (harf[1] + 299 >= 299):
                                         found = True
-                                        unlem = imagesearcharea("./unlem.png", harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
+                                        unlem = imagesearcharea(image_path("unlem.png"), harf[0] + x, harf[1] - 60 + y,harf[0] + 80 + x, harf[1] + 15 + y, 0.980)
                                         if unlem[0] != -1:
                                             print("Yaratık bulundu ama unlem var - devam4")
                                             found = False
@@ -1455,12 +1520,12 @@ def main(stop_event):
 
                                 time.sleep(0.65)
 
-                                maptest = imagesearcharea("Harita.png", 760, 146, 930, 270)
+                                maptest = imagesearcharea(image_path("Harita.png"), 760, 146, 930, 270)
 
                                 if maptest[0] != -1 and bolge != 0:
                                     found = False
-                                    zaten_dovuste = imagesearcharea("iptal.png", 182, 200, 1740, 863, 0.8)
-                                    kapat = imagesearch("kapat.png")
+                                    zaten_dovuste = imagesearcharea(image_path("iptal.png"), 182, 200, 1740, 863, 0.8)
+                                    kapat = imagesearch(image_path("kapat.png"))
 
                                     if zaten_dovuste[0] != -1:
                                         print("Zaten dovuste")
@@ -1531,7 +1596,7 @@ def main(stop_event):
                             bozuk = 1
                             break
                     time.sleep(0.2)
-                    golge = imagesearcharea("golge.png", 244, 180, 700, 700)
+                    golge = imagesearcharea(image_path("golge.png"), 244, 180, 700, 700)
                     if golge[0] != -1:
                         sayac4 = 0
                         break
@@ -1539,9 +1604,9 @@ def main(stop_event):
 
 
                 time.sleep(0.05)
-                iptal = imagesearch("iptal.png")
-                kapat = imagesearch("kapat.png")
-                olu_yaratık = imagesearch("harita.png")
+                iptal = imagesearch(image_path("iptal.png"))
+                kapat = imagesearch(image_path("kapat.png"))
+                olu_yaratık = imagesearch(image_path("harita.png"))
 
                 if iptal[0] != -1:
                     human_like_mouse_move(iptal[0],
@@ -1567,7 +1632,7 @@ def main(stop_event):
 
                 elif olu_yaratık[0] != -1:
                     time.sleep(1)
-                    olu_yaratık = imagesearch("harita.png")
+                    olu_yaratık = imagesearch(image_path("harita.png"))
                     if olu_yaratık[0] != -1:
                         human_like_mouse_move(avlan[0],
                                               avlan[1], 0.3,
@@ -1579,8 +1644,8 @@ def main(stop_event):
                         found = False
                         bozuk = 1
 
-                golge = imagesearcharea("golge.png",244,180,307,246)
-                aura = imagesearcharea("aura.png",277,220,440,390)
+                golge = imagesearcharea(image_path("golge.png"),244,180,307,246)
+                aura = imagesearcharea(image_path("aura.png"),277,220,440,390)
 
                 """BURAYIACif golge[0] != -1 and bozuk != 1 and aura[0] == -1:
                     aurahazirlik(kesim_control.get_troll_power_key(), kesim_control.get_aura_delay())
@@ -1589,9 +1654,9 @@ def main(stop_event):
                 """
                 time.sleep(0.1)
                 while bozuk != 1:
-                    Buyu = imagesearcharea("Buyu1.png",400,300,600,600)
-                    Buyu_2 = imagesearcharea("Buyu2.png",400,300,600,500)
-                    Vurus = imagesearcharea("Vurus12.png",400,300,600,500)
+                    Buyu = imagesearcharea(image_path("Buyu1.png"),400,300,600,600)
+                    Buyu_2 = imagesearcharea(image_path("Buyu2.png"),400,300,600,500)
+                    Vurus = imagesearcharea(image_path("Vurus12.png"),400,300,600,500)
 
                     if Buyu[0] == -1 and Vurus[0] == -1 and Buyu_2[0] == -1:
                         print("Sıra yaratıkta, beklemeye devam:", sayac1)
@@ -1622,8 +1687,8 @@ def main(stop_event):
                             print("Bekleme sayaci" , sayac1)
                         if sayac1%7 == 0 and sayac1 != 0:
                             bozuk = 0
-                            iptal =  imagesearch("iptal.png")
-                            kapat = imagesearch("kapat.png")
+                            iptal =  imagesearch(image_path("iptal.png"))
+                            kapat = imagesearch(image_path("kapat.png"))
                             if iptal[0] != -1:
                                 human_like_mouse_move(iptal[0],
                                                       iptal[1], 0.3,
@@ -1696,26 +1761,26 @@ def main(stop_event):
 
 
                         """BURAYIACif sayac3>1: #and sayac3 % 5 == 0:
-                            buyutab = imagesearcharea("buyutab.png",353,268,578,446)
+                            buyutab = imagesearcharea(image_path("buyutab.png"),353,268,578,446)
                             if buyutab[0] != -1:
                                 time.sleep(0.3)
-                                buyutab = imagesearcharea("buyutab.png", 353, 268, 578, 446)
+                                buyutab = imagesearcharea(image_path("buyutab.png"), 353, 268, 578, 446)
                                 if buyutab[0] != -1:
                                     time.sleep(0.3)
-                                    buyutab = imagesearcharea("buyutab.png", 353, 268, 578, 446)
+                                    buyutab = imagesearcharea(image_path("buyutab.png"), 353, 268, 578, 446)
                                     if buyutab[0] != -1:
                                         time.sleep(0.3)
                                         pyautogui.press('tab')
                                         print("BUYU TABI KAPANDI")
 
                         if sayac3>1: # and sayac3 % 5 == 0:
-                            aura = imagesearcharea("aura.png", 277, 220, 440, 390)
+                            aura = imagesearcharea(image_path("aura.png"), 277, 220, 440, 390)
                             if aura[0] == -1:
                                 time.sleep(0.3)
-                                aura = imagesearcharea("aura.png", 277, 220, 440, 390)
+                                aura = imagesearcharea(image_path("aura.png"), 277, 220, 440, 390)
                                 if aura[0] == -1:
                                     time.sleep(0.3)
-                                    aura = imagesearcharea("aura.png", 277, 220, 440, 390)
+                                    aura = imagesearcharea(image_path("aura.png"), 277, 220, 440, 390)
                                     if aura[0] == -1:
                                         health, rakip_Can, mana, sayi = calculateHealth_EnemyNumber()
                                         print("Mevcut can: %", health)
@@ -1909,7 +1974,7 @@ def main(stop_event):
 
                         time.sleep(0.7)
 
-                        binek = imagesearcharea("Binek.png",1558,155,2419,725,0.9)
+                        binek = imagesearcharea(image_path("Binek.png"),1558,155,2419,725,0.9)
                         print(binek)
                         if  binek[0] != -1:
                             found = False
@@ -1955,7 +2020,7 @@ def main(stop_event):
             if sayac < 20 and not found and savas_sonu == 0:
                 print("Sayaca girdi", sayac)
                 if sayac % 1 == 0: #sayac == 0 or
-                    Map = imagesearch("./Harita.png")
+                    Map = imagesearch(image_path("Harita.png"))
                     #print(Map[0], Map[1])
                 if Map[0] == -1:
                     time.sleep(0.5)
