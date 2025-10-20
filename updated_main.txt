@@ -19,22 +19,6 @@ import tkinter as tk
 from tkinter import ttk
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-PIXELFINDER_DIRECTORIES = {
-    "com": os.path.join(SCRIPT_DIR, "pixelfinder1"),
-    "tr": os.path.join(SCRIPT_DIR, "pixelfinder2"),
-}
-
-DEFAULT_REGION = "com"
-IMAGE_BASE_PATH = PIXELFINDER_DIRECTORIES[DEFAULT_REGION]
-
-
-def set_image_region(region_key):
-    """Update the active image directory based on the selected region."""
-
-    global IMAGE_BASE_PATH
-    IMAGE_BASE_PATH = PIXELFINDER_DIRECTORIES.get(region_key, PIXELFINDER_DIRECTORIES[DEFAULT_REGION])
 # Change this path if your PNG assets are stored in a different directory.
 IMAGE_BASE_PATH = SCRIPT_DIR
 
@@ -107,23 +91,6 @@ class ThreadControl:
         # Load settings button
         self.load_button = ttk.Button(kayit_frame, text="Ayarları Yükle", command=self.load_settings)
         self.load_button.pack(pady=5,padx=5, side=tk.LEFT)
-
-        # Region selection
-        region_frame = tk.Frame(config_frame, background="#e6f7ff")
-        region_frame.pack(pady=5, padx=15, side=tk.TOP)
-
-        region_label = ttk.Label(region_frame, text="Sunucu:", background="#e6f7ff")
-        region_label.pack(side=tk.LEFT, padx=5)
-
-        self.region_var = tk.StringVar(value="com")
-        self.region_combobox = ttk.Combobox(
-            region_frame,
-            values=["com", "tr"],
-            state='readonly',
-            textvariable=self.region_var,
-            style='CustomCombobox.TCombobox'
-        )
-        self.region_combobox.pack(side=tk.LEFT, padx=5)
 
         # Frame for the duration input
         self.infoframe = tk.Frame(config_frame, background="#e6f7ff",)
@@ -443,7 +410,6 @@ class ThreadControl:
             file.write(f"Troll Power Key: {self.troll_power_key.get()}\n")
             file.write(f"Super Hit Selection: {self.super_hit_selection.get()}\n")
             file.write(f"Aura Delay: {self.aura_delay_dropdown.get()}\n")  # Save the Aura Delay setting
-            file.write(f"Region: {self.region_var.get()}\n")
 
             # Save each dropdown selection in the super hit rows
             first_row_values = [combobox.get() for combobox in self.first_row_frame.winfo_children() if
@@ -456,43 +422,6 @@ class ThreadControl:
     def load_settings(self):
         try:
             with open('settings.txt', 'r') as file:
-                settings = {}
-                for line in file:
-                    if ': ' in line:
-                        key, value = line.split(': ', 1)
-                        settings[key.strip()] = value.strip()
-
-                def str_to_bool(value):
-                    return value.lower() in ("true", "1", "yes", "on")
-
-                self.duration_entry.delete(0, tk.END)
-                self.duration_entry.insert(0, settings.get("Duration", ""))
-                if "First Choice" in settings:
-                    self.combobox1.set(settings["First Choice"])
-                if "Second Choice" in settings:
-                    self.combobox2.set(settings["Second Choice"])
-                if "First Turn Mana" in settings:
-                    self.first_turn_mana.set(str_to_bool(settings["First Turn Mana"]))
-                if "First Turn Health" in settings:
-                    self.first_turn_health.set(str_to_bool(settings["First Turn Health"]))
-                if "First Turn Wisdom-Anger" in settings:
-                    self.first_turn_wisdom_anger.set(str_to_bool(settings["First Turn Wisdom-Anger"]))
-                if "Troll Power Key" in settings:
-                    self.troll_power_key.set(settings["Troll Power Key"])
-                if "Super Hit Selection" in settings:
-                    try:
-                        self.super_hit_selection.set(int(settings["Super Hit Selection"]))
-                    except ValueError:
-                        pass
-                if "Aura Delay" in settings:
-                    self.aura_delay_dropdown.set(settings["Aura Delay"])
-                if "Region" in settings:
-                    region_value = settings["Region"]
-                    if region_value not in PIXELFINDER_DIRECTORIES:
-                        region_value = DEFAULT_REGION
-                    self.region_var.set(region_value)
-
-                first_row_values = settings.get("First Row Values", "").split(',') if settings.get("First Row Values") else []
                 lines = file.readlines()
                 self.duration_entry.delete(0, tk.END)
                 self.duration_entry.insert(0, lines[0].split(': ')[1].strip())
@@ -511,7 +440,6 @@ class ThreadControl:
                                             isinstance(combobox, ttk.Combobox)], first_row_values):
                     combobox.set(value)
 
-                second_row_values = settings.get("Second Row Values", "").split(',') if settings.get("Second Row Values") else []
                 second_row_values = lines[10].split(': ')[1].strip().split(',')
                 for combobox, value in zip([combobox for combobox in self.second_row_frame.winfo_children() if
                                             isinstance(combobox, ttk.Combobox)], second_row_values):
@@ -640,7 +568,6 @@ class ThreadControl:
         if base64imagecheck():
             if not hasattr(self, 'thread') or not self.thread.is_alive():
                 try:
-                    set_image_region(self.region_var.get())
                     duration = int(self.duration_entry.get())
                     self.remaining_time = duration * 60  # Süreyi saniye cinsinden kaydet
                     self.end_time = time.time() + self.remaining_time  # Kesim süresinin bitiş zamanını hesapla
